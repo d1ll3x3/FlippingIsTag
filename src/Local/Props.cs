@@ -35,7 +35,7 @@ namespace FlippingIsTag.Local
         private const float PickRange = 15f;
 
         private const float PickCooldown = 1f;
-        private const float PreviewInterval = 0.1f;
+        private const float PreviewInterval = 0.2f;
 
         /// <summary>How long our own turn wins over what the host last published, while the host catches up.</summary>
         private const float PoseHold = 1.5f;
@@ -696,35 +696,39 @@ namespace FlippingIsTag.Local
         /// </summary>
         private void HideBody(int ownerId, Func<Renderer[]> bodyRenderers)
         {
-            // A respawn replaces the body, and the renderers we knew about with it.
-            if (hiddenBodies.TryGetValue(ownerId, out List<Renderer> renderers) && renderers.TrueForAll(r => r == null))
+            // One pass that both hides and notices a respawn, which replaces the body and every
+            // renderer we knew about with it: each check on a renderer is a call into the game.
+            if (hiddenBodies.TryGetValue(ownerId, out List<Renderer> renderers))
             {
-                hiddenBodies.Remove(ownerId);
-                renderers = null;
-            }
+                bool any = false;
 
-            if (renderers == null)
-            {
-                renderers = new List<Renderer>();
-
-                foreach (Renderer renderer in bodyRenderers())
+                foreach (Renderer renderer in renderers)
                 {
-                    if (renderer.enabled)
+                    if (renderer != null)
                     {
-                        renderers.Add(renderer);
+                        renderer.enabled = false;
+                        any = true;
                     }
                 }
 
-                hiddenBodies[ownerId] = renderers;
-            }
-
-            foreach (Renderer renderer in renderers)
-            {
-                if (renderer != null)
+                if (any)
                 {
-                    renderer.enabled = false;
+                    return;
                 }
             }
+
+            renderers = new List<Renderer>();
+
+            foreach (Renderer renderer in bodyRenderers())
+            {
+                if (renderer.enabled)
+                {
+                    renderer.enabled = false;
+                    renderers.Add(renderer);
+                }
+            }
+
+            hiddenBodies[ownerId] = renderers;
         }
 
         private void Remove(int ownerId)

@@ -65,7 +65,7 @@ namespace FlippingIsTag.Match
         public bool PingTag;
         public bool HideNames;
         public float TagRadius;
-        public float RevealInterval;
+        public float TauntInterval;
         public int PropMisses;
 
         /// <summary>Whether players bump into each other. Applies in and out of a round.</summary>

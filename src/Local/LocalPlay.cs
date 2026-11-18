@@ -30,9 +30,6 @@ namespace FlippingIsTag.Local
         private Vector3 holdPosition;
         private int lastRound = -1;
         private Phase lastPhase;
-        private int lastRevealSlot = -1;
-
-        public event Action<string> Notice;
 
         public bool Held => held;
 
@@ -41,7 +38,6 @@ namespace FlippingIsTag.Local
             lastReportAt.Clear();
             Release();
             lastRound = -1;
-            lastRevealSlot = -1;
         }
 
         /// <summary>
@@ -50,7 +46,8 @@ namespace FlippingIsTag.Local
         /// </summary>
         public Func<int, Vector3, float> DistanceTo { get; set; }
 
-        public void Tick(TagSettings settings, bool hidingInPlace)
+        /// <param name="keepStill">Held in place whatever the rules say: hiding in place, or watching the seekers.</param>
+        public void Tick(bool keepStill)
         {
             MatchView view = StateSync.View;
             int me = Roster.LocalId;
@@ -64,13 +61,12 @@ namespace FlippingIsTag.Local
             Rules rules = Rules.For(view.Info.Mode);
             Phase phase = view.Info.Phase;
 
-            UpdateHold(view.InRound && phase != Phase.Results && (rules.IsHeld(mine, phase) || hidingInPlace));
+            UpdateHold(view.InRound && phase != Phase.Results && (rules.IsHeld(mine, phase) || keepStill));
             WatchRoundStart(view, me);
 
             if (phase == Phase.Playing && !held)
             {
                 ReportTouches(view, rules, mine, me);
-                Reveal(view, mine);
             }
 
             lastPhase = phase;
@@ -140,7 +136,6 @@ namespace FlippingIsTag.Local
                 return;
             }
 
-            lastRevealSlot = -1;
             lastReportAt.Clear();
 
             if (!info.Gather || NetRole.IsHost)
@@ -251,54 +246,6 @@ namespace FlippingIsTag.Local
                 {
                     Messages.SendRescue(other);
                 }
-            }
-        }
-
-        /// <summary>
-        /// Hiders give themselves away every so often with a ping of their own, so a round
-        /// cannot be won by finding one perfect corner and waiting. The slot is counted off the
-        /// clock every machine shares, so all hiders ping together.
-        /// </summary>
-        private void Reveal(MatchView view, PlayerInfo mine)
-        {
-            float interval = view.Info.RevealInterval;
-
-            if (interval <= 0f || mine.Role != Role.Hider && mine.Role != Role.Prop)
-            {
-                return;
-            }
-
-            int slot = Mathf.FloorToInt(StateSync.SecondsLeft / interval);
-
-            if (lastRevealSlot < 0)
-            {
-                lastRevealSlot = slot;
-                return;
-            }
-
-            if (slot == lastRevealSlot)
-            {
-                return;
-            }
-
-            lastRevealSlot = slot;
-
-            try
-            {
-                PlayerRef local = Roster.Local;
-                PlayerPings pings = local?.PlayerPings;
-
-                if (pings == null || !Roster.TryGetPosition(local, out Vector3 here))
-                {
-                    return;
-                }
-
-                pings.RequestPingServerRpc(here + Vector3.up, pings.GetDefaultTextureIndex(), null, null);
-                Notice?.Invoke("Your position was revealed!");
-            }
-            catch (Exception ex)
-            {
-                TagPlugin.Logger.LogError($"Could not reveal our position: {ex.Message}");
             }
         }
     }

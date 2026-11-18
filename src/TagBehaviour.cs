@@ -30,6 +30,8 @@ namespace FlippingIsTag
         private Concealment concealment;
         private Collisions collisions;
         private PropCamera propCamera;
+        private Taunts taunts;
+        private Spectator spectator;
         private Hud hud;
         private TagMenu menu;
 
@@ -46,14 +48,19 @@ namespace FlippingIsTag
             concealment = new Concealment();
             collisions = new Collisions();
             propCamera = new PropCamera();
+            taunts = new Taunts();
+            spectator = new Spectator();
             hud = new Hud();
             menu = new TagMenu(settings, ToggleRound, hud.Notify);
 
             match.Notice += hud.Notify;
-            localPlay.Notice += hud.Notify;
             props.Notice += hud.Notify;
+            taunts.Notice += hud.Notify;
+            spectator.Notice += hud.Notify;
 
             Messages.Received += OnMessage;
+            Messages.Taunted += OnTaunted;
+            Dummies.Whistled += OnTaunted;
             PingHook.Pinged += OnPinged;
 
             // A prop's disguise is the prop, for every touch and every reach check.
@@ -82,7 +89,15 @@ namespace FlippingIsTag
                 {
                     StateSync.Host = match;
                     match.Tick(Roster.Ids);
-                    Dummies.Tick(match, props, settings);
+
+                    if (settings.TestMode.Value)
+                    {
+                        Dummies.Tick(match, props, settings);
+                    }
+                    else if (Dummies.Count > 0)
+                    {
+                        Dummies.RemoveAll();
+                    }
                 }
                 else if (wasHost)
                 {
@@ -94,7 +109,9 @@ namespace FlippingIsTag
                 wasHost = host;
 
                 StateSync.Tick();
-                localPlay.Tick(settings, props.HidingInPlace);
+                spectator.Tick();
+                taunts.Tick();
+                localPlay.Tick(props.HidingInPlace || spectator.Active);
                 props.Tick();
                 hud.Tick();
 
@@ -123,13 +140,25 @@ namespace FlippingIsTag
                     }
                 }
 
-                if (InputReader.WasPressedThisFrame(settings.PropKey.Value))
+                if (InputReader.WasPressedThisFrame(settings.TauntKey.Value))
                 {
-                    props.Pick();
+                    taunts.Taunt();
                 }
 
-                props.HandlePoseKeys(settings);
-                props.HandleHideKeys(settings);
+                spectator.HandleKeys(settings);
+
+                // The prop keys aim from the camera and the arrows switch seekers, so neither
+                // works while the camera is on someone else.
+                if (!spectator.Active)
+                {
+                    if (InputReader.WasPressedThisFrame(settings.PropKey.Value))
+                    {
+                        props.Pick();
+                    }
+
+                    props.HandlePoseKeys(settings);
+                    props.HandleHideKeys(settings);
+                }
 
                 InputBlock.Apply();
             }
@@ -175,7 +204,7 @@ namespace FlippingIsTag
                 concealment.LateTick();
 
                 // After the disguise is posed this frame, so the camera fits the prop as it is now.
-                propCamera.Tick(TagPlugin.Settings, props);
+                propCamera.Tick(TagPlugin.Settings, props, spectator.Active);
             }
             catch (Exception ex)
             {
@@ -185,9 +214,16 @@ namespace FlippingIsTag
 
         private void OnGUI()
         {
+            // IMGUI calls this once per event - layout, every mouse move, every key - and only
+            // the repaint draws anything. Input is read in Update, so the rest is wasted work.
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+
             try
             {
-                hud.Draw(TagPlugin.Settings, menu.IsOpen, props);
+                hud.Draw(TagPlugin.Settings, menu.IsOpen, props, taunts, spectator);
                 menu.Draw();
             }
             catch (Exception ex)
@@ -242,6 +278,9 @@ namespace FlippingIsTag
                     break;
             }
         }
+
+        /// <summary>A whistle, on every machine.</summary>
+        private void OnTaunted(int sender) => taunts.Heard(sender, props);
 
         /// <summary>From a point to a player: their disguise when they wear one, their body when they do not.</summary>
         private float DistanceToPlayer(int ownerId, Vector3 point)
@@ -329,6 +368,8 @@ namespace FlippingIsTag
             concealment.Clear();
             collisions.Clear();
             propCamera.Forget();
+            spectator.Forget();
+            taunts.Clear();
             hud.Clear();
             lastMissAt.Clear();
         }
@@ -338,9 +379,12 @@ namespace FlippingIsTag
             try
             {
                 Messages.Received -= OnMessage;
+                Messages.Taunted -= OnTaunted;
+                Dummies.Whistled -= OnTaunted;
                 PingHook.Pinged -= OnPinged;
 
                 menu?.Close();
+                spectator?.Stop();
                 propCamera?.Restore();
                 Dummies.RemoveAll();
                 localPlay?.Clear();

@@ -21,6 +21,7 @@ namespace FlippingIsTag.Local
 
         private readonly Dictionary<int, GameObject> hidden = new();
         private readonly List<int> scratch = new();
+        private readonly List<int> released = new();
 
         private PlayerNicknameFollower[] followers = Array.Empty<PlayerNicknameFollower>();
         private float nextRefreshAt;
@@ -64,6 +65,13 @@ namespace FlippingIsTag.Local
         public void LateTick()
         {
             MatchView view = StateSync.View;
+
+            // Nothing to hide and nothing to give back: no search through the scene either.
+            if (!view.InRound && hidden.Count == 0)
+            {
+                followers = Array.Empty<PlayerNicknameFollower>();
+                return;
+            }
 
             if (Time.unscaledTime >= nextRefreshAt)
             {
@@ -113,13 +121,18 @@ namespace FlippingIsTag.Local
             }
 
             // Anyone no longer concealed gets their name back.
-            foreach (int owner in new List<int>(hidden.Keys))
-            {
-                if (scratch.Contains(owner))
-                {
-                    continue;
-                }
+            released.Clear();
 
+            foreach (KeyValuePair<int, GameObject> pair in hidden)
+            {
+                if (!scratch.Contains(pair.Key))
+                {
+                    released.Add(pair.Key);
+                }
+            }
+
+            foreach (int owner in released)
+            {
                 if (hidden[owner] != null)
                 {
                     hidden[owner].SetActive(true);
@@ -131,8 +144,7 @@ namespace FlippingIsTag.Local
 
         private static int OwnerOf(PlayerNicknameFollower follower)
         {
-            PlayerNetworked networked = follower.PlayerNetworked;
-            return networked == null ? -1 : Roster.OwnerIdOf(null, networked);
+            return Roster.OwnerIdOf(follower.PlayerNetworked);
         }
     }
 }

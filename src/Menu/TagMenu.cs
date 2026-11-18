@@ -24,7 +24,7 @@ namespace FlippingIsTag.Menu
     internal sealed class TagMenu
     {
         private const float WindowWidth = 900f;
-        private const float WindowHeight = 620f;
+        private const float WindowHeight = 720f;
         private const float SidebarWidth = 190f;
         private const float RowHeight = 44f;
         private const float RowGap = 8f;
@@ -117,7 +117,15 @@ namespace FlippingIsTag.Menu
             if (!Capturing && InputReader.WasPressedOrRepeating(Key.Tab, ref tabRepeat))
             {
                 int step = InputReader.ShiftHeld ? -1 : 1;
-                Open((Page)(((int)page + step + PageNames.Length) % PageNames.Length));
+                var next = page;
+
+                do
+                {
+                    next = (Page)(((int)next + step + PageNames.Length) % PageNames.Length);
+                }
+                while (!Shown(next));
+
+                Open(next);
             }
 
             ui.Capture();
@@ -140,6 +148,12 @@ namespace FlippingIsTag.Menu
 
                 Gui.RoundedFill(new Rect(window.x - 1f, window.y - 1f, window.width + 2f, window.height + 2f), new Color(1f, 1f, 1f, 0.08f));
                 Gui.RoundedFill(window, new Color(0.06f, 0.06f, 0.085f, 0.97f));
+
+                // Test mode was turned off while its page was open.
+                if (!Shown(page))
+                {
+                    page = Page.Options;
+                }
 
                 DrawHeader(window);
                 DrawSidebar(window);
@@ -198,12 +212,20 @@ namespace FlippingIsTag.Menu
             }
         }
 
+        /// <summary>The TEST page only shows in test mode.</summary>
+        private bool Shown(Page which) => which != Page.Test || settings.TestMode.Value;
+
         private void DrawSidebar(Rect window)
         {
             float y = window.y + 84f;
 
             for (int i = 0; i < PageNames.Length; i++)
             {
+                if (!Shown((Page)i))
+                {
+                    continue;
+                }
+
                 if (ui.Tab(new Rect(window.x + 16f, y, SidebarWidth - 16f, 46f), PageNames[i], (int)page == i))
                 {
                     Open((Page)i);
@@ -319,7 +341,7 @@ namespace FlippingIsTag.Menu
 
             ui.Toggle(new Rect(right, y, column, RowHeight), "Found players become seekers", settings.InfectOnFind, host);
             y += RowHeight + RowGap;
-            ui.Slider(new Rect(right, y, column, tall), "Reveal hiders every (s, 0 = never)", settings.RevealInterval, 0f, 300f, 5f, "0", host);
+            ui.Slider(new Rect(right, y, column, tall), "Auto taunt after (s, 0 = never)", settings.TauntInterval, 0f, 300f, 5f, "0", host);
             y += tall + RowGap;
             ui.Toggle(new Rect(right, y, column, RowHeight), "Hide names from seekers", settings.HideNames, host);
             y += RowHeight + RowGap;
@@ -414,6 +436,8 @@ namespace FlippingIsTag.Menu
             ui.Toggle(new Rect(area.x, y, column, RowHeight), "Show my hitbox as a prop", settings.ShowHitbox);
             y += RowHeight + RowGap;
             ui.Toggle(new Rect(area.x, y, column, RowHeight), "Pull the camera back for big props", settings.PropCamera);
+            y += RowHeight + RowGap;
+            ui.Toggle(new Rect(area.x, y, column, RowHeight), "Test mode (TEST page, dummies)", settings.TestMode);
 
             y = area.y;
             ui.Header(new Rect(right, y, column, 20f), "KEYS   (click, then press the new key)");
@@ -436,6 +460,10 @@ namespace FlippingIsTag.Menu
             ui.KeyBind(new Rect(right, y, column, RowHeight), "Raise disguise", settings.RaiseKey);
             y += RowHeight + RowGap;
             ui.KeyBind(new Rect(right, y, column, RowHeight), "Lower disguise", settings.LowerKey);
+            y += RowHeight + RowGap;
+            ui.KeyBind(new Rect(right, y, column, RowHeight), "Taunt (whistle)", settings.TauntKey);
+            y += RowHeight + RowGap;
+            ui.KeyBind(new Rect(right, y, column, RowHeight), "Watch the seekers", settings.SpectateKey);
         }
 
         private void EnsureStyles()

@@ -5,7 +5,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>FlippingIsTag</AssemblyName>
     <RootNamespace>FlippingIsTag</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <Platforms>AnyCPU</Platforms>
@@ -43,6 +43,11 @@
 
   <ItemGroup>
     <Reference Include="$(InteropDir)\*.dll" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The taunt whistle, inside the dll so installing the mod stays one file. -->
+    <EmbeddedResource Include="assets\whistle.wav" LogicalName="FlippingIsTag.whistle.wav" />
   </ItemGroup>
 
   <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(Deploy)' == 'true'">

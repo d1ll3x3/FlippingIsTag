@@ -31,11 +31,12 @@ namespace FlippingIsTag.Local
         private Cinemachine3OrbitRig.Settings baseOrbits;
         private float factor = 1f;
 
-        public void Tick(TagSettings settings, Props props)
+        /// <param name="spectating">Watching someone else: the camera gets the game's own distance back.</param>
+        public void Tick(TagSettings settings, Props props, bool spectating)
         {
             try
             {
-                float size = settings.PropCamera.Value ? props.LocalDisguiseSize : 0f;
+                float size = settings.PropCamera.Value && !spectating ? props.LocalDisguiseSize : 0f;
                 float target = 1f;
 
                 CinemachineOrbitalFollow current = Find();

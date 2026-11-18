@@ -27,6 +27,8 @@ namespace FlippingIsTag
         public ConfigEntry<Key> RaiseKey { get; }
         public ConfigEntry<Key> LowerKey { get; }
         public ConfigEntry<Key> ResetOffsetKey { get; }
+        public ConfigEntry<Key> TauntKey { get; }
+        public ConfigEntry<Key> SpectateKey { get; }
 
         public ConfigEntry<GameMode> Mode { get; }
         public ConfigEntry<float> RoundMinutes { get; }
@@ -46,10 +48,11 @@ namespace FlippingIsTag
         public ConfigEntry<int> TeamScoreLimit { get; }
 
         public ConfigEntry<bool> InfectOnFind { get; }
-        public ConfigEntry<float> RevealInterval { get; }
+        public ConfigEntry<float> TauntInterval { get; }
         public ConfigEntry<bool> HideNames { get; }
         public ConfigEntry<int> PropMisses { get; }
 
+        public ConfigEntry<bool> TestMode { get; }
         public ConfigEntry<DummyBehavior> DummyBehavior { get; }
         public ConfigEntry<float> DummySpeed { get; }
 
@@ -77,6 +80,11 @@ namespace FlippingIsTag
             LowerKey = file.Bind("Binds", "LowerKey", Key.LeftCtrl, "Prop hunt, hiding in place: lower your disguise.");
             ResetOffsetKey = file.Bind("Binds", "ResetOffsetKey", Key.Backspace,
                 "Prop hunt, hiding in place: put your disguise back on your body.");
+            TauntKey = file.Bind("Binds", "TauntKey", Key.T,
+                "Hide and seek and prop hunt: whistle, so the seekers hear where you are.");
+            SpectateKey = file.Bind("Binds", "SpectateKey", Key.V,
+                "Hide and seek and prop hunt: while hiding, watch the seekers look for you. " +
+                "The left and right arrows switch between them.");
 
             Mode = file.Bind("Match", "Mode", GameMode.Classic, "Which game the next round plays.");
             RoundMinutes = file.Bind("Match", "RoundMinutes", 4f, "Length of a round, hiding time not included.");
@@ -98,7 +106,9 @@ namespace FlippingIsTag
                 "How close, in metres, a touch has to be. Measured centre to centre.");
             PingTag = file.Bind("Tagging", "PingTag", true,
                 "Pinging a player tags them. Uses the game's own ping.");
-            PingRange = file.Bind("Tagging", "PingRange", 25f, "Furthest a ping can tag from, in metres.");
+            // A new key rather than "PingRange": every existing config file had the old 25 m
+            // default written in, and a key it has never seen starts at the new default.
+            PingRange = file.Bind("Tagging", "PingDistance", 15f, "Furthest a ping can tag from, in metres.");
             TagBackSeconds = file.Bind("Tagging", "TagBackSeconds", 3f,
                 "How long a player who was just tagged, or just freed, cannot be tagged again.");
 
@@ -109,13 +119,16 @@ namespace FlippingIsTag
 
             InfectOnFind = file.Bind("Hiding", "InfectOnFind", true,
                 "Hide and seek and prop hunt: a found player joins the seekers instead of sitting out.");
-            RevealInterval = file.Bind("Hiding", "RevealInterval", 60f,
-                "Every this many seconds each hider gives away where they are with a ping. 0 never.");
+            TauntInterval = file.Bind("Hiding", "TauntInterval", 60f,
+                "Hide and seek and prop hunt: a hider who has not taunted for this many seconds whistles " +
+                "by themselves, so a round cannot be won by finding one perfect corner and waiting. 0 never.");
             HideNames = file.Bind("Hiding", "HideNames", true,
                 "Hide the name over a hider's head from the seekers. Without it the name shows through walls.");
             PropMisses = file.Bind("Hiding", "PropMisses", 3,
                 "Prop hunt: pings at nothing a seeker can make before being stunned. 0 never stuns.");
 
+            TestMode = file.Bind("Test", "TestMode", false,
+                "Show the menu's TEST page, where the host spawns dummies. Turning it off removes them.");
             DummyBehavior = file.Bind("Test", "DummyBehavior", Test.DummyBehavior.Play,
                 "What test dummies do: Still, Wander, or Play the round.");
             DummySpeed = file.Bind("Test", "DummySpeed", 6f, "How fast test dummies move, in metres per second.");
@@ -143,7 +156,7 @@ namespace FlippingIsTag
             Clamp(TagBackSeconds, 0f, 30f);
             Clamp(StunSeconds, 0.5f, 30f);
             Clamp(TeamScoreLimit, 0, 200);
-            Clamp(RevealInterval, 0f, 600f);
+            Clamp(TauntInterval, 0f, 600f);
             Clamp(PropMisses, 0, 20);
             Clamp(DummySpeed, 0.5f, 20f);
         }

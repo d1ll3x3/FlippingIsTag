@@ -136,7 +136,7 @@ namespace FlippingIsTag.Match
             info.PingTag = Settings.PingTag.Value;
             info.HideNames = Settings.HideNames.Value;
             info.TagRadius = Settings.TagRadius.Value;
-            info.RevealInterval = Settings.RevealInterval.Value;
+            info.TauntInterval = Settings.TauntInterval.Value;
             info.PropMisses = Settings.PropMisses.Value;
             info.Collisions = Settings.Collisions.Value;
             info.Gather = Settings.GatherAtStart.Value;
@@ -150,7 +150,7 @@ namespace FlippingIsTag.Match
 
         private static bool SameRules(MatchInfo a, MatchInfo b) =>
             a.ContactTag == b.ContactTag && a.PingTag == b.PingTag && a.HideNames == b.HideNames &&
-            Mathf.Approximately(a.TagRadius, b.TagRadius) && Mathf.Approximately(a.RevealInterval, b.RevealInterval) &&
+            Mathf.Approximately(a.TagRadius, b.TagRadius) && Mathf.Approximately(a.TauntInterval, b.TauntInterval) &&
             a.PropMisses == b.PropMisses && a.Collisions == b.Collisions && a.Gather == b.Gather;
 
         public void Tick(IReadOnlyList<int> sessionPlayers)

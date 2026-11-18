@@ -15,7 +15,7 @@ namespace FlippingIsTag
     public class TagPlugin : BasePlugin
     {
         public const string Guid = "com.dani.flippingistag";
-        public const string Version = "1.0.0";
+        public const string Version = "1.1.0";
 
         internal static ManualLogSource Logger { get; private set; }
         internal static TagSettings Settings { get; private set; }

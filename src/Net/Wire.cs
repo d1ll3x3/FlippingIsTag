@@ -127,8 +127,8 @@ namespace FlippingIsTag.Net
                 (m.Gather ? 1 : 0) << 19;
 
             int radius = Mathf.Clamp(Mathf.RoundToInt(m.TagRadius * 10f), 0, 63);
-            int reveal = Mathf.Clamp(Mathf.RoundToInt(m.RevealInterval / 5f), 0, 127);
-            int z = radius | reveal << 6 | Mathf.Clamp(m.PropMisses, 0, 31) << 13;
+            int taunt = Mathf.Clamp(Mathf.RoundToInt(m.TauntInterval / 5f), 0, 127);
+            int z = radius | taunt << 6 | Mathf.Clamp(m.PropMisses, 0, 31) << 13;
 
             int tenths = Mathf.Clamp(Mathf.CeilToInt(m.Remaining * 10f), 0, MaxExact);
 
@@ -152,7 +152,7 @@ namespace FlippingIsTag.Net
                 Gather = (payload >> 19 & 1) != 0,
                 Remaining = Mathf.RoundToInt(v.y) / 10f,
                 TagRadius = (z & 0x3F) / 10f,
-                RevealInterval = (z >> 6 & 0x7F) * 5f,
+                TauntInterval = (z >> 6 & 0x7F) * 5f,
                 PropMisses = z >> 13 & 0x1F,
             };
         }

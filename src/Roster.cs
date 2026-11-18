@@ -13,7 +13,9 @@ namespace FlippingIsTag
     /// Owner ids are handed out by the server and every machine sees the same numbers, so they
     /// are what the match state is keyed by. Nothing here holds on to a PlayerRef between
     /// frames: an IL2CPP wrapper kept over a respawn points at freed memory and crashes the
-    /// process. Only ids are kept, and the player is looked up again from the live list.
+    /// process. Only ids are kept, and the player is looked up again from the live list - once
+    /// per frame, into a map the rest of that frame reads from, since the mod asks for the same
+    /// few players dozens of times a frame.
     /// </summary>
     internal static class Roster
     {
@@ -22,9 +24,16 @@ namespace FlippingIsTag
         private static readonly List<int> ids = new();
         private static readonly Dictionary<int, string> names = new();
 
+        /// <summary>This frame's players by owner id. Never read on another frame: see the class notes.</summary>
+        private static readonly Dictionary<int, PlayerRef> frame = new();
+
+        private static readonly Dictionary<Type, PropertyInfo> ownerIdByType = new();
+
         private static PropertyInfo ownerIdProperty;
+        private static Func<PlayerNetworked, int> readOwnerId;
         private static bool ownerIdResolved;
         private static float nextRefreshAt;
+        private static int frameBuilt = -1;
 
         /// <summary>Owner ids of everyone in the session, sorted, ourselves included.</summary>
         public static IReadOnlyList<int> Ids => ids;
@@ -82,6 +91,8 @@ namespace FlippingIsTag
         public static void Clear()
         {
             ids.Clear();
+            frame.Clear();
+            frameBuilt = -1;
             LocalId = -1;
             nextRefreshAt = 0f;
         }
@@ -96,6 +107,19 @@ namespace FlippingIsTag
                 return null;
             }
 
+            if (frameBuilt != Time.frameCount)
+            {
+                BuildFrame();
+            }
+
+            return frame.TryGetValue(ownerId, out PlayerRef player) ? player : null;
+        }
+
+        private static void BuildFrame()
+        {
+            frameBuilt = Time.frameCount;
+            frame.Clear();
+
             var players = Connected;
 
             if (players != null)
@@ -103,16 +127,22 @@ namespace FlippingIsTag
                 for (int i = 0; i < players.Count; i++)
                 {
                     PlayerRef player = players[i];
+                    int id = OwnerIdOf(player);
 
-                    if (player != null && OwnerIdOf(player) == ownerId)
+                    if (id >= 0)
                     {
-                        return player;
+                        frame.TryAdd(id, player);
                     }
                 }
             }
 
             PlayerRef local = Local;
-            return local != null && OwnerIdOf(local) == ownerId ? local : null;
+            int localId = OwnerIdOf(local);
+
+            if (localId >= 0)
+            {
+                frame.TryAdd(localId, local);
+            }
         }
 
         /// <summary>The nickname a player goes by, or their id when they have none yet.</summary>
@@ -181,15 +211,7 @@ namespace FlippingIsTag
 
             try
             {
-                PlayerNetworked networked = player.PlayerNetworked;
-                PropertyInfo property = ResolveOwnerId();
-
-                if (networked == null || property == null)
-                {
-                    return -1;
-                }
-
-                return property.GetValue(networked) is int id ? id : -1;
+                return OwnerIdOf(player.PlayerNetworked);
             }
             catch (Exception ex)
             {
@@ -197,6 +219,10 @@ namespace FlippingIsTag
                 return -1;
             }
         }
+
+        /// <summary>The FishNet owner id behind a player's network object, or -1 when it cannot be read.</summary>
+        public static int OwnerIdOf(PlayerNetworked networked) =>
+            networked == null || ResolveOwnerId() == null ? -1 : readOwnerId(networked);
 
         /// <summary>
         /// The owner id of any of a player's network components, for the ones that reach us
@@ -213,8 +239,13 @@ namespace FlippingIsTag
 
             try
             {
-                PropertyInfo property = behaviour.GetType().GetProperty("OwnerId",
-                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                Type type = behaviour.GetType();
+
+                if (!ownerIdByType.TryGetValue(type, out PropertyInfo property))
+                {
+                    property = type.GetProperty("OwnerId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                    ownerIdByType[type] = property;
+                }
 
                 return property?.GetValue(behaviour) is int owner ? owner : -1;
             }
@@ -296,6 +327,29 @@ namespace FlippingIsTag
                 TagPlugin.Logger.LogError(
                     "PlayerNetworked has no OwnerId in this build, so players cannot be told apart. " +
                     "The mod will stay idle.");
+                return null;
+            }
+
+            // A delegate rather than PropertyInfo.GetValue on every read: it is read for every
+            // player every frame, and reflection boxes and checks each call.
+            MethodInfo getter = ownerIdProperty.GetGetMethod();
+
+            if (getter == null || getter.ReturnType != typeof(int))
+            {
+                TagPlugin.Logger.LogError($"PlayerNetworked.OwnerId is not a readable int in this build; the mod will stay idle.");
+                ownerIdProperty = null;
+                return null;
+            }
+
+            try
+            {
+                readOwnerId = (Func<PlayerNetworked, int>)Delegate.CreateDelegate(typeof(Func<PlayerNetworked, int>), getter);
+            }
+            catch (ArgumentException ex)
+            {
+                TagPlugin.Logger.LogWarning($"Reading OwnerId through reflection instead of a delegate: {ex.Message}");
+                PropertyInfo property = ownerIdProperty;
+                readOwnerId = networked => (int)property.GetValue(networked);
             }
 
             return ownerIdProperty;

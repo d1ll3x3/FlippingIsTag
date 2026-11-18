@@ -63,6 +63,10 @@ namespace FlippingIsTag.Local
         private struct Box
         {
             public Bounds Local;
+
+            /// <summary>Local's corners, read once rather than through Bounds for every look.</summary>
+            public Vector3 LocalMin;
+            public Vector3 LocalMax;
             public Matrix4x4 WorldToLocal;
             public Matrix4x4 LocalToWorld;
 
@@ -79,6 +83,11 @@ namespace FlippingIsTag.Local
             public int Hash;
             public string Path;
             public Bounds Bounds;
+
+            /// <summary>Bounds' corners, read once, for the ray test that runs over every candidate.</summary>
+            public Vector3 Min;
+            public Vector3 Max;
+
             public float Volume;
             public readonly List<Box> Boxes = new();
         }
@@ -188,7 +197,7 @@ namespace FlippingIsTag.Local
                 }
 
                 // The world box first: it rules out nearly everything for the price of one test.
-                if (!candidate.Bounds.IntersectRay(ray, out float enter) || enter > far)
+                if (!RayHitsBox(ray.origin, ray.direction, candidate.Min, candidate.Max, out float enter) || enter > far)
                 {
                     continue;
                 }
@@ -216,15 +225,15 @@ namespace FlippingIsTag.Local
                     continue;
                 }
 
-                var local = new Ray(origin, direction);
+                direction.Normalize();
 
-                if (!box.Local.IntersectRay(local, out float localEnter))
+                if (!RayHitsBox(origin, direction, box.LocalMin, box.LocalMax, out float localEnter))
                 {
                     continue;
                 }
 
                 // Back to metres along the world ray: the mesh may be scaled.
-                Vector3 entry = box.LocalToWorld.MultiplyPoint3x4(local.GetPoint(Mathf.Max(0f, localEnter)));
+                Vector3 entry = box.LocalToWorld.MultiplyPoint3x4(origin + direction * Mathf.Max(0f, localEnter));
                 float distance = Vector3.Dot(entry - ray.origin, ray.direction);
 
                 if (distance >= near && distance <= far)
@@ -234,6 +243,58 @@ namespace FlippingIsTag.Local
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Slab test of a ray against an axis-aligned box, in plain C#. Bounds.IntersectRay does
+        /// the same but is a call into the game, and this runs for thousands of objects a look.
+        /// Returns the distance along the ray where it enters, 0 when it starts inside.
+        /// </summary>
+        private static bool RayHitsBox(Vector3 origin, Vector3 direction, Vector3 min, Vector3 max, out float enter)
+        {
+            // Components rather than the indexer or vector operators: the interop may route those
+            // through the game, and fields are always plain reads.
+            float near = float.NegativeInfinity;
+            float far = float.PositiveInfinity;
+            enter = 0f;
+
+            if (!Slab(origin.x, direction.x, min.x, max.x, ref near, ref far) ||
+                !Slab(origin.y, direction.y, min.y, max.y, ref near, ref far) ||
+                !Slab(origin.z, direction.z, min.z, max.z, ref near, ref far))
+            {
+                return false;
+            }
+
+            enter = near > 0f ? near : 0f;
+            return true;
+        }
+
+        private static bool Slab(float origin, float direction, float min, float max, ref float near, ref float far)
+        {
+            if (direction > -1e-8f && direction < 1e-8f)
+            {
+                return origin >= min && origin <= max;
+            }
+
+            float t1 = (min - origin) / direction;
+            float t2 = (max - origin) / direction;
+
+            if (t1 > t2)
+            {
+                (t1, t2) = (t2, t1);
+            }
+
+            if (t1 > near)
+            {
+                near = t1;
+            }
+
+            if (t2 < far)
+            {
+                far = t2;
+            }
+
+            return near <= far && far >= 0f;
         }
 
         /// <summary>The object a name stands for, ready to draw. Null when this level has no such thing.</summary>
@@ -327,9 +388,12 @@ namespace FlippingIsTag.Local
 
                     int key = root.GetInstanceID();
                     Bounds bounds = WorldBounds(renderer);
+                    Bounds local = MeshOf(renderer).bounds;
                     var box = new Box
                     {
-                        Local = MeshOf(renderer).bounds,
+                        Local = local,
+                        LocalMin = local.min,
+                        LocalMax = local.max,
                         WorldToLocal = renderer.transform.worldToLocalMatrix,
                         LocalToWorld = renderer.transform.localToWorldMatrix,
                         Scale = renderer.transform.lossyScale,
@@ -375,6 +439,8 @@ namespace FlippingIsTag.Local
                     candidate.Path = PathOf(candidate.Root);
                     candidate.Hash = Hash(candidate.Path);
                     candidate.Volume = VolumeOf(candidate);
+                    candidate.Min = candidate.Bounds.min;
+                    candidate.Max = candidate.Bounds.max;
                 }
                 catch (Exception ex)
                 {

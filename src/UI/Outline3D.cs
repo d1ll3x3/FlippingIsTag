@@ -7,13 +7,16 @@ namespace FlippingIsTag.UI
     ///
     /// IMGUI has no line primitive, and turning a texture with the GUI matrix is not something
     /// this build is known to allow, so a line is a row of small squares close enough together
-    /// to read as one. A body outline is a few hundred of them, which IMGUI draws without effort.
+    /// to read as one.
     /// </summary>
     internal static class Outline3D
     {
-        private const float DotSpacing = 3f;
+        // Each dot is one draw call, so a whole body outline has to stay in the hundreds: dots a
+        // few pixels apart, circles of 16 sides, and no line longer than MaxDots.
+        private const float DotSpacing = 5f;
         private const float DotSize = 2f;
-        private const int CircleSegments = 24;
+        private const int CircleSegments = 16;
+        private const int MaxDots = 120;
 
         /// <summary>The outline of a collider as it sits in the world: capsule, sphere or box, or its bounds.</summary>
         public static void Collider(Camera camera, Collider collider, Color color)
@@ -156,7 +159,7 @@ namespace FlippingIsTag.UI
             var start = new Vector2(a.x, Screen.height - a.y);
             var end = new Vector2(b.x, Screen.height - b.y);
             float length = Vector2.Distance(start, end);
-            int dots = Mathf.Clamp(Mathf.CeilToInt(length / DotSpacing), 1, 400);
+            int dots = Mathf.Clamp(Mathf.CeilToInt(length / DotSpacing), 1, MaxDots);
 
             for (int i = 0; i <= dots; i++)
             {

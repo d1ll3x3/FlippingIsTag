@@ -45,6 +45,13 @@ namespace FlippingIsTag.Test
         private const float Gravity = 25f;
         private const float ThinkInterval = 0.25f;
 
+        /// <summary>
+        /// Seconds between a hiding dummy's whistles. Sooner and less regular than the automatic
+        /// one, the way a player taunts, so the sound can be tried without waiting a minute.
+        /// </summary>
+        private const float MinWhistleGap = 8f;
+        private const float MaxWhistleGap = 20f;
+
         private sealed class Dummy
         {
             public int Id;
@@ -59,6 +66,9 @@ namespace FlippingIsTag.Test
             public float FallSpeed;
             public float NextThinkAt;
             public float StopAt = float.PositiveInfinity;
+
+            /// <summary>When it whistles next. 0 while it is not hiding.</summary>
+            public float NextWhistleAt;
 
             /// <summary>Lean and bounce while walking, so a dummy does not just slide.</summary>
             public float Gait;
@@ -75,6 +85,9 @@ namespace FlippingIsTag.Test
 
         private static int lastRound = -1;
         private static Phase lastPhase;
+
+        /// <summary>A dummy whistled. Dummies only exist here, so nobody else hears it.</summary>
+        public static event Action<int> Whistled;
 
         public static int Count => dummies.Count;
 
@@ -100,6 +113,13 @@ namespace FlippingIsTag.Test
 
             position = Vector3.zero;
             return false;
+        }
+
+        /// <summary>What the camera follows to watch a dummy.</summary>
+        public static bool TryGetRoot(int ownerId, out Transform root)
+        {
+            root = dummies.TryGetValue(ownerId, out Dummy dummy) && dummy.Root != null ? dummy.Root.transform : null;
+            return root != null;
         }
 
         /// <summary>What the prop disguise needs to stand in for a dummy.</summary>
@@ -278,6 +298,27 @@ namespace FlippingIsTag.Test
                     dummy.NextThinkAt = Time.unscaledTime + ThinkInterval * Random.Range(0.8f, 1.2f);
                     Think(dummy, view, settings);
                 }
+
+                Whistle(dummy, view, me);
+            }
+        }
+
+        private static void Whistle(Dummy dummy, MatchView view, PlayerInfo me)
+        {
+            if (!Taunts.CanTaunt(view, me) || view.Info.Phase != Phase.Playing)
+            {
+                dummy.NextWhistleAt = 0f;
+                return;
+            }
+
+            if (dummy.NextWhistleAt == 0f)
+            {
+                dummy.NextWhistleAt = Time.unscaledTime + Random.Range(MinWhistleGap, MaxWhistleGap);
+            }
+            else if (Time.unscaledTime >= dummy.NextWhistleAt)
+            {
+                dummy.NextWhistleAt = Time.unscaledTime + Random.Range(MinWhistleGap, MaxWhistleGap);
+                Whistled?.Invoke(dummy.Id);
             }
         }
 

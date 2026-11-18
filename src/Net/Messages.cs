@@ -24,8 +24,10 @@ namespace FlippingIsTag.Net
     ///   0xE200 + team      I want this team next round
     ///   0xE300 + pose      prop hunt: how I turned my prop (see PropPose)
     ///   0x8000 + axis|step prop hunt: how far I shifted my disguise on one axis (see PropOffset)
+    ///   0xE380             I whistled (a taunt)
     ///
     /// The sender is whoever owns the relay it arrived on, so it never has to be written down.
+    /// A taunt is the one message for everyone, not the host: every machine plays the whistle.
     /// </summary>
     internal static class Messages
     {
@@ -37,7 +39,8 @@ namespace FlippingIsTag.Net
         private const ushort TeamBase = 0xE200;
         private const ushort PoseBase = 0xE300;
         private const ushort OffsetBase = 0x8000;
-        private const ushort End = PoseBase + PropPose.Mask + 1;
+        private const ushort TauntId = PoseBase + PropPose.Mask + 1;
+        private const ushort End = TauntId + 1;
 
         private static bool hooked;
 
@@ -45,6 +48,9 @@ namespace FlippingIsTag.Net
 
         /// <summary>Raised on the host for every message, with the sender's owner id.</summary>
         public static event Action<int, ushort> Received;
+
+        /// <summary>Raised on every machine for every taunt, with the sender's owner id. Ours come back too.</summary>
+        public static event Action<int> Taunted;
 
         public enum Op
         {
@@ -205,6 +211,9 @@ namespace FlippingIsTag.Net
             }
         }
 
+        /// <summary>Through the relay even on the host: everyone else has to hear it too.</summary>
+        public static void SendTaunt() => Relay(TauntId);
+
         private static void Send(ushort block, int value, int max)
         {
             if (value < 0 || value > max)
@@ -222,6 +231,11 @@ namespace FlippingIsTag.Net
                 return;
             }
 
+            Relay(id);
+        }
+
+        private static void Relay(ushort id)
+        {
             if (!hooked)
             {
                 return;
@@ -233,7 +247,7 @@ namespace FlippingIsTag.Net
 
                 if (relay == null)
                 {
-                    TagPlugin.Logger.LogWarning("No relay to send through; the host will not hear this.");
+                    TagPlugin.Logger.LogWarning("No relay to send through; nobody will hear this.");
                     return;
                 }
 
@@ -241,7 +255,7 @@ namespace FlippingIsTag.Net
             }
             catch (Exception ex)
             {
-                TagPlugin.Logger.LogError($"Could not send a message to the host: {ex.Message}");
+                TagPlugin.Logger.LogError($"Could not send a message: {ex.Message}");
             }
         }
 
@@ -280,7 +294,19 @@ namespace FlippingIsTag.Net
 
             try
             {
-                // Only the host acts on these, and its own were handled when it sent them.
+                if (id == TauntId)
+                {
+                    int whistler = Roster.OwnerIdOf(__instance.playerRef, __instance);
+
+                    if (whistler >= 0)
+                    {
+                        Taunted?.Invoke(whistler);
+                    }
+
+                    return;
+                }
+
+                // Only the host acts on the rest, and its own were handled when it sent them.
                 if (!NetRole.IsHost || __instance.IsOwner)
                 {
                     return;

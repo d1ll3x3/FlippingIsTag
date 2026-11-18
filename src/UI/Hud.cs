@@ -223,7 +223,7 @@ namespace FlippingIsTag.UI
 
         // ---- drawing ------------------------------------------------------------------------
 
-        public void Draw(TagSettings settings, bool menuOpen, Props props)
+        public void Draw(TagSettings settings, bool menuOpen, Props props, Taunts taunts, Spectator spectator)
         {
             Props.Aim? aim = props.Current;
             bool disguised = props.LocalDisguiseSize > 0f;
@@ -250,7 +250,8 @@ namespace FlippingIsTag.UI
 
             DrawFlash();
 
-            if (disguised && settings.ShowHitbox.Value && !blind)
+            // Not while watching a seeker: the body is somewhere else, and the outline is hundreds of draws.
+            if (disguised && settings.ShowHitbox.Value && !blind && !spectator.Active)
             {
                 DrawHitbox();
             }
@@ -280,8 +281,13 @@ namespace FlippingIsTag.UI
             {
                 DrawMatchBar(view, rules);
                 DrawBanner(view, rules, mine, me);
+                DrawHiderKeys(view, mine, settings, taunts);
 
-                if (props.HidingInPlace && !menuOpen)
+                if (spectator.Active && !menuOpen)
+                {
+                    DrawSpectating(spectator, settings);
+                }
+                else if (props.HidingInPlace && !menuOpen)
                 {
                     DrawHiding(props, settings);
                 }
@@ -478,6 +484,50 @@ namespace FlippingIsTag.UI
                               $"[{settings.TipOverKey.Value}] tip over   ·   [{settings.HideKey.Value}] hide in place";
                 Gui.ShadowLabel(new Rect(0f, cy + 50f, Screen.width, 22f), keys, infoStyle);
             }
+        }
+
+        /// <summary>A hider's own keys under the banner, with how long until they whistle by themselves.</summary>
+        private void DrawHiderKeys(MatchView view, PlayerInfo mine, TagSettings settings, Taunts taunts)
+        {
+            var parts = new List<string>();
+
+            if (Taunts.CanTaunt(view, mine))
+            {
+                parts.Add($"[{settings.TauntKey.Value}] taunt");
+
+                if (taunts.SecondsToAuto >= 0f)
+                {
+                    float left = taunts.SecondsToAuto;
+                    parts.Add(Gui.Colored($"whistling by yourself in {left:0} s", left < 10f ? ChaserColor : Gui.Normal));
+                }
+            }
+
+            if (Spectator.CanWatch(view, mine))
+            {
+                parts.Add($"[{settings.SpectateKey.Value}] watch the seekers");
+            }
+
+            if (parts.Count > 0)
+            {
+                Gui.ShadowLabel(new Rect(0f, 136f, Screen.width, 22f), string.Join("   ·   ", parts), infoStyle);
+            }
+        }
+
+        /// <summary>Who the camera is on while we watch the seekers, and how to switch or go back.</summary>
+        private void DrawSpectating(Spectator spectator, TagSettings settings)
+        {
+            const float width = 520f;
+            float x = (Screen.width - width) * 0.5f;
+            float y = Screen.height - 130f;
+
+            Gui.RoundedFill(new Rect(x, y, width, 80f), Gui.Panel);
+
+            bannerStyle.normal.textColor = ChaserColor;
+            Gui.ShadowLabel(new Rect(x, y + 8f, width, 30f), $"WATCHING  {Roster.NameOf(spectator.Watching)}", bannerStyle);
+            bannerStyle.normal.textColor = Color.white;
+
+            Gui.ShadowLabel(new Rect(x, y + 44f, width, 22f),
+                $"left / right  switch seeker   ·   [{settings.SpectateKey.Value}] back to your hiding spot", infoStyle);
         }
 
         /// <summary>The hiding-in-place panel: how to shift the disguise, how far it is shifted, and why a shift was refused.</summary>
